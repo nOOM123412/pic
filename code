@@ -1,125 +1,440 @@
-import sys
-import subprocess
-import requests
-
-
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-
-# Автоустановка библиотек
-packages = [
-    "python-telegram-bot",
-    "requests"
-]
-
-for pkg in packages:
-    try:
-        __import__(pkg.split("-")[0])
-    except:
-        print(f"Устанавливаю {pkg}...")
-        install(pkg)
-
-
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    ContextTypes,
-    filters
+import asyncio
+from aiogram import Bot, Dispatcher, F
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
 )
+from aiogram.client.default import DefaultBotProperties
 
-
-# ==================================
-# НАСТРОЙКИ
-# ==================================
+# =====================================
+# ТОКЕН БОТА
+# =====================================
 
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
-# Получить API ключ:
-# https://pixabay.com/api/docs/
-PIXABAY_API_KEY = "56006060-61891714dc94c024fdc783176"
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 
+dp = Dispatcher()
 
-# ==================================
-# ПОИСК КАРТИНКИ
-# ==================================
+# =====================================
+# ХРАНЕНИЕ ДАННЫХ
+# =====================================
 
-def search_image(query):
-    url = "https://pixabay.com/api/"
+approved_users = set()
+user_forms = {}
 
-    params = {
-        "key": PIXABAY_API_KEY,
-        "q": query,
-        "image_type": "photo",
-        "per_page": 3,
-        "safesearch": "true"
-    }
+# =====================================
+# КНОПКИ
+# =====================================
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=15
+def form_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Отправить",
+                    callback_data="send_form"
+                ),
+                InlineKeyboardButton(
+                    text="Заново",
+                    callback_data="restart_form"
+                )
+            ]
+        ]
     )
 
-    data = response.json()
 
-    hits = data.get("hits")
-
-    if not hits:
-        return None
-
-    # largeImageURL / webformatURL
-    return hits[0]["largeImageURL"]
-
-
-# ==================================
-# ОБРАБОТКА СООБЩЕНИЙ
-# ==================================
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.message.text
-
-    msg = await update.message.reply_text(
-        f"Ищу картинку: {query}"
+def main_menu():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Мой профиль",
+                    callback_data="profile"
+                ),
+                InlineKeyboardButton(
+                    text="Моё зеркало",
+                    callback_data="mirror"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Поддержка",
+                    callback_data="help"
+                ),
+                InlineKeyboardButton(
+                    text="Каналы",
+                    callback_data="channels"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Настройки",
+                    callback_data="settings"
+                )
+            ]
+        ]
     )
 
-    try:
-        image_url = search_image(query)
 
-        if not image_url:
-            await msg.edit_text("Картинка не найдена")
-            return
-
-        # Telegram сам загрузит фото
-        await update.message.reply_photo(photo=image_url)
-
-        await msg.delete()
-
-    except Exception as e:
-        await msg.edit_text(f"Ошибка: {e}")
+def profile_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="• Назад •",
+                    callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
 
 
-# ==================================
-# ЗАПУСК
-# ==================================
+def mirror_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="@KrSeii",
+                    url="https://t.me/KrSeii"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад",
+                    callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
 
-def main():
-    print("Бот запускается...")
 
-    app = ApplicationBuilder().token(TOKEN).build()
+def support_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="@KrSeII",
+                    url="https://t.me/KrSeII"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад",
+                    callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_message
+
+def channels_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Мануал",
+                    url="https://t.me/UDD_man"
+                ),
+                InlineKeyboardButton(
+                    text="Болталка",
+                    url="https://t.me/+_4Z8Ri03Yw4yNzVi"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад",
+                    callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
+
+
+def settings_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Логи",
+                    callback_data="logs"
+                ),
+                InlineKeyboardButton(
+                    text="Цены",
+                    callback_data="prices"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Моё имя",
+                    callback_data="my_name"
+                ),
+                InlineKeyboardButton(
+                    text="Реквизиты",
+                    callback_data="requisites"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад",
+                    callback_data="back_to_menu"
+                )
+            ]
+        ]
+    )
+
+# =====================================
+# ТЕКСТЫ
+# =====================================
+
+WELCOME_TEXT = """
+Добро пожаловать в UDD team!
+
+Для вступления заполните форму ниже:
+
+• Опыт работы.
+• Откуда узнали о нас?
+• Какое время уделяете работе?
+"""
+
+# =====================================
+# START
+# =====================================
+
+@dp.message(CommandStart())
+async def start_handler(message: Message):
+    user_id = message.from_user.id
+
+    if user_id in approved_users:
+        await message.answer(
+            "Главное меню:",
+            reply_markup=main_menu()
         )
+        return
+
+    await message.answer(WELCOME_TEXT)
+
+# =====================================
+# АНКЕТА
+# =====================================
+
+@dp.message()
+async def form_handler(message: Message):
+    user_id = message.from_user.id
+
+    if user_id in approved_users:
+        return
+
+    user_forms[user_id] = message.text
+
+    text = f"""
+Ваша заявка выглядит так:
+
+• {message.text}
+
+Всё верно?
+"""
+
+    await message.answer(
+        text,
+        reply_markup=form_keyboard()
     )
 
-    print("Бот запущен!")
+# =====================================
+# ЗАНОВО
+# =====================================
 
-    app.run_polling()
+@dp.callback_query(F.data == "restart_form")
+async def restart_form(callback: CallbackQuery):
 
+    await callback.message.delete()
+
+    await callback.message.answer(WELCOME_TEXT)
+
+    await callback.answer()
+
+# =====================================
+# ОТПРАВИТЬ
+# =====================================
+
+@dp.callback_query(F.data == "send_form")
+async def send_form(callback: CallbackQuery):
+    user_id = callback.from_user.id
+
+    await callback.answer("Заявка отправлена!")
+
+    await callback.message.delete()
+
+    await asyncio.sleep(5)
+
+    approved_users.add(user_id)
+
+    await callback.message.answer(
+        "Главное меню:",
+        reply_markup=main_menu()
+    )
+
+# =====================================
+# ПРОФИЛЬ
+# =====================================
+
+@dp.callback_query(F.data == "profile")
+async def profile_handler(callback: CallbackQuery):
+    user_id = callback.from_user.id
+
+    await callback.message.delete()
+
+    profile_text = f"""
+Ваш профиль:
+___________________
+
+• Профиты - 0
+
+• Касса - 0$
+
+• Ваш ID - {user_id}
+"""
+
+    await callback.message.answer(
+        profile_text,
+        reply_markup=profile_keyboard()
+    )
+
+    await callback.answer()
+
+# =====================================
+# МОЁ ЗЕРКАЛО
+# =====================================
+
+@dp.callback_query(F.data == "mirror")
+async def mirror_handler(callback: CallbackQuery):
+
+    await callback.message.delete()
+
+    mirror_text = """
+Для получения личного зеркала просим вас написать оператору.
+"""
+
+    await callback.message.answer(
+        mirror_text,
+        reply_markup=mirror_keyboard()
+    )
+
+    await callback.answer()
+
+# =====================================
+# ПОДДЕРЖКА
+# =====================================
+
+@dp.callback_query(F.data == "help")
+async def help_handler(callback: CallbackQuery):
+
+    await callback.message.delete()
+
+    support_text = """
+Для оказания вам помощи обратитесь к оператору.
+"""
+
+    await callback.message.answer(
+        support_text,
+        reply_markup=support_keyboard()
+    )
+
+    await callback.answer()
+
+# =====================================
+# КАНАЛЫ
+# =====================================
+
+@dp.callback_query(F.data == "channels")
+async def channels_handler(callback: CallbackQuery):
+
+    await callback.message.delete()
+
+    channels_text = """
+Все каналы команды:
+"""
+
+    await callback.message.answer(
+        channels_text,
+        reply_markup=channels_keyboard()
+    )
+
+    await callback.answer()
+
+# =====================================
+# НАСТРОЙКИ
+# =====================================
+
+@dp.callback_query(F.data == "settings")
+async def settings_handler(callback: CallbackQuery):
+
+    # Удаляем меню
+    await callback.message.delete()
+
+    settings_text = """
+Настройки:
+"""
+
+    # Отправляем настройки
+    await callback.message.answer(
+        settings_text,
+        reply_markup=settings_keyboard()
+    )
+
+    await callback.answer()
+
+# =====================================
+# НЕДОСТУПНЫЕ РАЗДЕЛЫ
+# =====================================
+
+@dp.callback_query(
+    F.data.in_(
+        [
+            "logs",
+            "prices",
+            "my_name",
+            "requisites"
+        ]
+    )
+)
+async def unavailable_sections(callback: CallbackQuery):
+
+    await callback.answer(
+        "Этот раздел пока недоступен.",
+        show_alert=True
+    )
+
+# =====================================
+# НАЗАД В МЕНЮ
+# =====================================
+
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(callback: CallbackQuery):
+
+    await callback.message.delete()
+
+    await callback.message.answer(
+        "Главное меню:",
+        reply_markup=main_menu()
+    )
+
+    await callback.answer()
+
+# =====================================
+# ЗАПУСК БОТА
+# =====================================
+
+async def main():
+    print("Бот успешно запущен!")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
