@@ -1,0 +1,54 @@
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
+
+TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
+
+
+# Команда /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет! Это MasterAuto")
+
+
+# Обработка любого текста
+async def search_pic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message.text
+
+    try:
+        # Поиск через inline-бота @pic
+        results = await context.bot.get_inline_bot_results(
+            bot_username="pic",
+            query=query
+        )
+
+        # Если картинки найдены
+        if results.results:
+            await context.bot.send_inline_bot_result(
+                chat_id=update.effective_chat.id,
+                query_id=results.query_id,
+                result_id=results.results[0].id
+            )
+        else:
+            await update.message.reply_text("Картинка не найдена.")
+
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_pic))
+
+    print("Бот запущен...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
