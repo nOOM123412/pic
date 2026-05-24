@@ -1,7 +1,6 @@
 import sys
 import subprocess
 import requests
-import os
 
 
 def install(package):
@@ -31,55 +30,79 @@ from telegram.ext import (
 )
 
 
-# ВСТАВЬ СВОЙ ТОКЕН
+# ==================================
+# НАСТРОЙКИ
+# ==================================
+
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+# Получить API ключ:
+# https://pixabay.com/api/docs/
+PIXABAY_API_KEY = "56006060-61891714dc94c024fdc783176"
 
 
-def download_image(query):
-    url = f"https://source.unsplash.com/600x400/?{query}"
+# ==================================
+# ПОИСК КАРТИНКИ
+# ==================================
+
+def search_image(query):
+    url = "https://pixabay.com/api/"
+
+    params = {
+        "key": PIXABAY_API_KEY,
+        "q": query,
+        "image_type": "photo",
+        "per_page": 3,
+        "safesearch": "true"
+    }
 
     response = requests.get(
         url,
-        headers=HEADERS,
-        timeout=20,
-        allow_redirects=True
+        params=params,
+        timeout=15
     )
 
-    image_path = "image.jpg"
+    data = response.json()
 
-    with open(image_path, "wb") as f:
-        f.write(response.content)
+    hits = data.get("hits")
 
-    return image_path
+    if not hits:
+        return None
 
+    # largeImageURL / webformatURL
+    return hits[0]["largeImageURL"]
+
+
+# ==================================
+# ОБРАБОТКА СООБЩЕНИЙ
+# ==================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
 
-    msg = await update.message.reply_text(f"Ищу: {query}")
+    msg = await update.message.reply_text(
+        f"Ищу картинку: {query}"
+    )
 
     try:
-        image_path = download_image(query)
+        image_url = search_image(query)
 
-        if not os.path.exists(image_path):
-            await msg.edit_text("Не удалось скачать картинку")
+        if not image_url:
+            await msg.edit_text("Картинка не найдена")
             return
 
-        with open(image_path, "rb") as photo:
-            await update.message.reply_photo(photo=photo)
+        # Telegram сам загрузит фото
+        await update.message.reply_photo(photo=image_url)
 
         await msg.delete()
-
-        # Удаляем файл после отправки
-        os.remove(image_path)
 
     except Exception as e:
         await msg.edit_text(f"Ошибка: {e}")
 
+
+# ==================================
+# ЗАПУСК
+# ==================================
 
 def main():
     print("Бот запускается...")
