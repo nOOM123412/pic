@@ -1,7 +1,5 @@
 import sys
 import subprocess
-import asyncio
-import requests
 from io import BytesIO
 
 
@@ -12,8 +10,7 @@ def install(package):
 # Автоустановка библиотек
 packages = [
     "python-telegram-bot",
-    "requests",
-    "beautifulsoup4"
+    "icrawler"
 ]
 
 for pkg in packages:
@@ -31,59 +28,49 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from bs4 import BeautifulSoup
+
+from icrawler.builtin import GoogleImageCrawler
+import os
 
 
 # ВСТАВЬ СВОЙ ТОКЕН
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0 Safari/537.36"
-    )
-}
-
-
-def get_image(query):
-    url = f"https://www.google.com/search?tbm=isch&q={query}"
-
-    response = requests.get(url, headers=HEADERS, timeout=10)
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    images = soup.find_all("img")
-
-    # Первая картинка обычно логотип Google
-    for img in images:
-        src = img.get("src")
-
-        if src and src.startswith("http"):
-            return src
-
-    return None
+DOWNLOAD_DIR = "images"
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
 
-    msg = await update.message.reply_text("Ищу картинку...")
+    msg = await update.message.reply_text(f"Ищу: {query}")
 
     try:
-        image_url = get_image(query)
+        # Очистка папки
+        if os.path.exists(DOWNLOAD_DIR):
+            for file in os.listdir(DOWNLOAD_DIR):
+                os.remove(os.path.join(DOWNLOAD_DIR, file))
+        else:
+            os.makedirs(DOWNLOAD_DIR)
 
-        if not image_url:
+        # Поиск картинки
+        crawler = GoogleImageCrawler(storage={"root_dir": DOWNLOAD_DIR})
+
+        crawler.crawl(
+            keyword=query,
+            max_num=1
+        )
+
+        files = os.listdir(DOWNLOAD_DIR)
+
+        if not files:
             await msg.edit_text("Картинка не найдена")
             return
 
-        image_data = requests.get(image_url, headers=HEADERS).content
+        image_path = os.path.join(DOWNLOAD_DIR, files[0])
 
-        photo = BytesIO(image_data)
-        photo.name = "image.jpg"
-
-        await update.message.reply_photo(photo=photo)
+        with open(image_path, "rb") as photo:
+            await update.message.reply_photo(photo=photo)
 
         await msg.delete()
 
