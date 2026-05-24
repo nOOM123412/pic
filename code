@@ -1,122 +1,77 @@
+import io
+import logging
 import requests
-
+from PIL import Image
+from duckduckgo_search import ddg_images
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# =========================
-# НАСТРОЙКИ
-# =========================
+# Настройте эти переменные
+TELEGRAM_TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
-BOT_TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
-
-# =========================
-# /start
-# =========================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Бот запущен. Отправьте любой текст — я пришлю первую картинку из поиска.")
 
-    await update.message.reply_text(
-        "Привет! Это MasterAuto"
-    )
-
-# =========================
-# ПОИСК КАРТИНКИ
-# =========================
-
-def search_image(query):
-
-    url = (
-        "https://gelbooru.com/index.php"
-        "?page=dapi&s=post&q=index"
-        "&json=1"
-        "&limit=1"
-        f"&tags={query}"
-    )
-
-    response = requests.get(
-        url,
-        timeout=15
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    posts = data.get("post")
-
-    if not posts:
-        return None
-
-    # Если пришёл один объект вместо списка
-    if isinstance(posts, dict):
-        return posts.get("file_url")
-
-    return posts[0].get("file_url")
-
-# =========================
-# ОБРАБОТКА ТЕКСТА
-# =========================
-
-async def handle_message(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE):
-
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
+    if not query:
+        await update.message.reply_text("Пустой запрос.")
+        return
+
+    await update.message.chat.send_action(action="upload_photo")
 
     try:
+        # ddg_images возвращает список результатов; берем первый
+        results = ddg_images(query, max_results=5)
+        if not results:
+            await update.message.reply_text("Картинки не найдены.")
+            return
 
-        image_url = search_image(query)
+        first = results[0]
+        img_url = first.get("image") or first.get("thumbnail") or first.get("url")
+        if not img_url:
+            await update.message.reply_text("Не удалось получить URL картинки.")
+            return
 
-        if image_url:
+        # Скачиваем картинку
+        resp = requests.get(img_url, timeout=15)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "").lower()
 
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=image_url,
-                caption=f"🔎 {query}"
-            )
+        # Если SVG или другой неподдерживаемый тип — пытаемся отправить как документ
+        if "svg" in content_type or content_type == "application/octet-stream":
+            bio = io.BytesIO(resp.content)
+            bio.name = "image.svg"
+            bio.seek(0)
+            await update.message.reply_document(bio)
+            return
 
-        else:
-
-            await update.message.reply_text(
-                "Ничего не найдено."
-            )
-
+        # Для безопасной отправки конвертируем в JPEG/PNG через PIL (если формат поддерживаем)
+        try:
+            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=85)
+            out.name = "image.jpg"
+            out.seek(0)
+            await update.message.reply_photo(out)
+        except Exception:
+            # Если PIL не справился, отправим сырые байты как документ
+            bio = io.BytesIO(resp.content)
+            bio.name = "image"
+            bio.seek(0)
+            await update.message.reply_document(bio)
     except Exception as e:
-
-        await update.message.reply_text(
-            f"Ошибка:\n{str(e)}"
-        )
-
-# =========================
-# ЗАПУСК
-# =========================
+        logger.exception("Ошибка при обработке запроса")
+        await update.message.reply_text("Произошла ошибка при поиске/загрузке картинки.")
 
 def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    app = Application.builder().token(
-        BOT_TOKEN
-    ).build()
-
-    app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
-    )
-
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_message
-        )
-    )
-
-    print("MasterAuto запущен")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     app.run_polling()
 
