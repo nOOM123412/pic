@@ -1,172 +1,43 @@
-import logging
-import requests
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import re
-from urllib.parse import quote
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from duckduckgo_search import DDGS
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
-# Замени на свой токен
-TELEGRAM_TOKEN = '8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q'
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start"""
-    await update.message.reply_text(
-        'Привет! Отправь мне текст, и я найду для него картинку.'
-    )
-
-async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Поиск и отправка изображения"""
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
-    
-    await update.message.reply_text('⏳ Ищу изображение...')
-    
+
+    await update.message.reply_text(f"Ищу картинку: {query}")
+
     try:
-        # Базовая фильтрация контента
-        forbidden_words = ['adult', 'porn', 'xxx', 'sex', 'nude', 'naked', 'nsfw', 'explicit']
-        if any(word.lower() in query.lower() for word in forbidden_words):
-            await update.message.reply_text('❌ Этот запрос содержит недопустимый контент.')
+        with DDGS() as ddgs:
+            results = list(ddgs.images(
+                keywords=query,
+                max_results=1
+            ))
+
+        if not results:
+            await update.message.reply_text("Картинка не найдена")
             return
-        
-        # Поиск изображения
-        image_url = get_image_url(query)
-        
-        if image_url:
-            try:
-                await update.message.reply_photo(
-                    photo=image_url,
-                    caption=f'🖼️ "{query}"'
-                )
-                logger.info(f"✅ Успешно: {query}")
-            except Exception as e:
-                logger.error(f"❌ Ошибка отправки: {e}")
-                await update.message.reply_text('⚠️ Ошибка отправки изображения.')
-        else:
-            await update.message.reply_text('😕 Изображение не найдено.')
-            
-    except Exception as e:
-        logger.error(f"❌ Общая ошибка: {e}")
-        await update.message.reply_text('⚠️ Ошибка при поиске.')
 
-def get_image_url(query: str) -> str:
-    """Получить первую ссылку на изображение"""
-    
-    # Пытаемся Bing
-    url = try_bing(query)
-    if url:
-        return url
-    
-    # Пытаемся DuckDuckGo
-    url = try_duckduckgo(query)
-    if url:
-        return url
-    
-    # Пытаемся Google
-    url = try_google(query)
-    if url:
-        return url
-    
-    return None
+        image_url = results[0]["image"]
 
-def try_google(query: str) -> str:
-    """Google Images парсинг"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        
-        url = f'https://www.google.com/search?q={quote(query)}&tbm=isch'
-        
-        logger.info(f"🔍 Google: ищу {query}")
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        # Ищем все URLs
-        urls = re.findall(r'(https?://[^\s"<>]+\.(?:jpg|jpeg|png|gif|webp|jfif))', response.text)
-        
-        if urls:
-            for url_candidate in urls:
-                if 'google' not in url_candidate and 'gstatic' not in url_candidate and len(url_candidate) > 20:
-                    logger.info(f"✅ Google нашёл")
-                    return url_candidate
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"❌ Google ошибка: {e}")
-        return None
+        await update.message.reply_photo(photo=image_url)
 
-def try_bing(query: str) -> str:
-    """Bing Images парсинг"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        
-        url = f'https://www.bing.com/images/search?q={quote(query)}'
-        
-        logger.info(f"🔍 Bing: ищу {query}")
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        # Bing хранит URLs в murl
-        matches = re.findall(r'"murl":"([^"]+)"', response.text)
-        
-        if matches:
-            for match in matches:
-                if match and 'http' in match and len(match) > 20:
-                    logger.info(f"✅ Bing нашёл")
-                    return match
-        
-        return None
-        
     except Exception as e:
-        logger.error(f"❌ Bing ошибка: {e}")
-        return None
+        await update.message.reply_text(f"Ошибка: {e}")
 
-def try_duckduckgo(query: str) -> str:
-    """DuckDuckGo Images парсинг"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        
-        url = f'https://duckduckgo.com/?q={quote(query)}&t=h_&ia=images&iax=images'
-        
-        logger.info(f"🔍 DuckDuckGo: ищу {query}")
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        # DuckDuckGo хранит в "image"
-        matches = re.findall(r'"image":"([^"]+)"', response.text)
-        
-        if matches:
-            for match in matches:
-                if match and 'http' in match and len(match) > 20:
-                    logger.info(f"✅ DuckDuckGo нашёл")
-                    return match
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"❌ DuckDuckGo ошибка: {e}")
-        return None
 
 def main():
-    """Запуск бота"""
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_image))
-    
-    logger.info("🤖 Бот запущен!")
-    application.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
 
-if __name__ == '__main__':
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Бот запущен")
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
     main()
