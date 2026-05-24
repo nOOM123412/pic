@@ -1,4 +1,6 @@
 import asyncio
+import os
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
@@ -6,7 +8,8 @@ from aiogram.types import (
     Message,
     CallbackQuery,
     InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InlineKeyboardButton,
+    FSInputFile
 )
 from aiogram.client.default import DefaultBotProperties
 
@@ -15,6 +18,17 @@ from aiogram.client.default import DefaultBotProperties
 # =====================================
 
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
+
+# =====================================
+# ПУТЬ К ФОТО
+# =====================================
+
+SHARED_DIR = os.getenv("SHARED_DIR", ".")
+MENU_PHOTO = os.path.join(SHARED_DIR, "tmpptqajd1i.png")
+
+# =====================================
+# BOT
+# =====================================
 
 bot = Bot(
     token=TOKEN,
@@ -102,7 +116,7 @@ def mirror_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="@KrSeii",
+                    text="Оператор",
                     url="https://t.me/KrSeii"
                 )
             ],
@@ -121,7 +135,7 @@ def support_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="@KrSeII",
+                    text="Оператор",
                     url="https://t.me/KrSeII"
                 )
             ],
@@ -191,6 +205,21 @@ def settings_keyboard():
     )
 
 # =====================================
+# ОТПРАВКА ГЛАВНОГО МЕНЮ
+# =====================================
+
+async def send_main_menu(chat_id):
+
+    photo = FSInputFile(MENU_PHOTO)
+
+    await bot.send_photo(
+        chat_id=chat_id,
+        photo=photo,
+        caption="Главное меню:",
+        reply_markup=main_menu()
+    )
+
+# =====================================
 # ТЕКСТЫ
 # =====================================
 
@@ -212,13 +241,12 @@ WELCOME_TEXT = """
 async def start_handler(message: Message):
     user_id = message.from_user.id
 
+    # Пользователь уже прошёл модерацию
     if user_id in approved_users:
-        await message.answer(
-            "Главное меню:",
-            reply_markup=main_menu()
-        )
+        await send_main_menu(message.chat.id)
         return
 
+    # Новый пользователь
     await message.answer(WELCOME_TEXT)
 
 # =====================================
@@ -276,10 +304,7 @@ async def send_form(callback: CallbackQuery):
 
     approved_users.add(user_id)
 
-    await callback.message.answer(
-        "Главное меню:",
-        reply_markup=main_menu()
-    )
+    await send_main_menu(callback.message.chat.id)
 
 # =====================================
 # ПРОФИЛЬ
@@ -293,7 +318,7 @@ async def profile_handler(callback: CallbackQuery):
 
     profile_text = f"""
 Ваш профиль:
-___________________
+____________
 
 • Профиты - 0
 
@@ -376,14 +401,12 @@ async def channels_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "settings")
 async def settings_handler(callback: CallbackQuery):
 
-    # Удаляем меню
     await callback.message.delete()
 
     settings_text = """
 Настройки:
 """
 
-    # Отправляем настройки
     await callback.message.answer(
         settings_text,
         reply_markup=settings_keyboard()
@@ -421,15 +444,12 @@ async def back_to_menu(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    await callback.message.answer(
-        "Главное меню:",
-        reply_markup=main_menu()
-    )
+    await send_main_menu(callback.message.chat.id)
 
     await callback.answer()
 
 # =====================================
-# ЗАПУСК БОТА
+# ЗАПУСК
 # =====================================
 
 async def main():
