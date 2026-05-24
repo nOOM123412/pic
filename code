@@ -1,6 +1,8 @@
-import os
 import sys
 import subprocess
+import asyncio
+import requests
+from io import BytesIO
 
 
 def install(package):
@@ -8,17 +10,18 @@ def install(package):
 
 
 # Автоустановка библиотек
-required_packages = [
+packages = [
     "python-telegram-bot",
-    "duckduckgo-search"
+    "requests",
+    "beautifulsoup4"
 ]
 
-for package in required_packages:
+for pkg in packages:
     try:
-        __import__(package.split("-")[0])
+        __import__(pkg.split("-")[0])
     except:
-        print(f"Устанавливаю {package}...")
-        install(package)
+        print(f"Устанавливаю {pkg}...")
+        install(pkg)
 
 
 from telegram import Update
@@ -28,35 +31,64 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from duckduckgo_search import DDGS
+from bs4 import BeautifulSoup
 
 
 # ВСТАВЬ СВОЙ ТОКЕН
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0 Safari/537.36"
+    )
+}
+
+
+def get_image(query):
+    url = f"https://www.google.com/search?tbm=isch&q={query}"
+
+    response = requests.get(url, headers=HEADERS, timeout=10)
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    images = soup.find_all("img")
+
+    # Первая картинка обычно логотип Google
+    for img in images:
+        src = img.get("src")
+
+        if src and src.startswith("http"):
+            return src
+
+    return None
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
 
-    await update.message.reply_text(f"Ищу картинку: {query}")
+    msg = await update.message.reply_text("Ищу картинку...")
 
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.images(
-                keywords=query,
-                max_results=1
-            ))
+        image_url = get_image(query)
 
-        if not results:
-            await update.message.reply_text("Картинка не найдена")
+        if not image_url:
+            await msg.edit_text("Картинка не найдена")
             return
 
-        image_url = results[0]["image"]
+        image_data = requests.get(image_url, headers=HEADERS).content
 
-        await update.message.reply_photo(photo=image_url)
+        photo = BytesIO(image_data)
+        photo.name = "image.jpg"
+
+        await update.message.reply_photo(photo=photo)
+
+        await msg.delete()
 
     except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
+        await msg.edit_text(f"Ошибка: {e}")
 
 
 def main():
