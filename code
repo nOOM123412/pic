@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import requests
 from io import BytesIO
 
 
@@ -10,7 +11,7 @@ def install(package):
 # Автоустановка библиотек
 packages = [
     "python-telegram-bot",
-    "icrawler"
+    "requests"
 ]
 
 for pkg in packages:
@@ -29,48 +30,48 @@ from telegram.ext import (
     filters
 )
 
-from icrawler.builtin import GoogleImageCrawler
-import os
 
-
-# ВСТАВЬ СВОЙ ТОКЕН
+# ВСТАВЬ СЮДА ТОКЕН
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 
-DOWNLOAD_DIR = "images"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+
+def get_image(query):
+    url = f"https://source.unsplash.com/featured/?{query}"
+
+    response = requests.get(
+        url,
+        headers=HEADERS,
+        timeout=15,
+        allow_redirects=True
+    )
+
+    # Финальная ссылка на изображение
+    return response.url
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
 
-    msg = await update.message.reply_text(f"Ищу: {query}")
+    msg = await update.message.reply_text("Ищу картинку...")
 
     try:
-        # Очистка папки
-        if os.path.exists(DOWNLOAD_DIR):
-            for file in os.listdir(DOWNLOAD_DIR):
-                os.remove(os.path.join(DOWNLOAD_DIR, file))
-        else:
-            os.makedirs(DOWNLOAD_DIR)
+        image_url = get_image(query)
 
-        # Поиск картинки
-        crawler = GoogleImageCrawler(storage={"root_dir": DOWNLOAD_DIR})
+        image_data = requests.get(
+            image_url,
+            headers=HEADERS,
+            timeout=15
+        ).content
 
-        crawler.crawl(
-            keyword=query,
-            max_num=1
-        )
+        photo = BytesIO(image_data)
+        photo.name = "image.jpg"
 
-        files = os.listdir(DOWNLOAD_DIR)
-
-        if not files:
-            await msg.edit_text("Картинка не найдена")
-            return
-
-        image_path = os.path.join(DOWNLOAD_DIR, files[0])
-
-        with open(image_path, "rb") as photo:
-            await update.message.reply_photo(photo=photo)
+        await update.message.reply_photo(photo=photo)
 
         await msg.delete()
 
