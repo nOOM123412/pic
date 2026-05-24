@@ -1,4 +1,6 @@
 import asyncio
+import os
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
@@ -18,10 +20,15 @@ from aiogram.client.default import DefaultBotProperties
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 # =====================================
-# ФОТО ГЛАВНОГО МЕНЮ
+# ПУТЬ К ФОТО
 # =====================================
 
-MENU_PHOTO = FSInputFile("tmpptqajd1i.png")
+SHARED_DIR = os.environ.get("SHARED_DIR")
+
+PHOTO_PATH = os.path.join(
+    SHARED_DIR,
+    "tmpptqajd1i.png"
+)
 
 # =====================================
 # BOT
@@ -29,7 +36,9 @@ MENU_PHOTO = FSInputFile("tmpptqajd1i.png")
 
 bot = Bot(
     token=TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    default=DefaultBotProperties(
+        parse_mode=ParseMode.HTML
+    )
 )
 
 dp = Dispatcher()
@@ -207,9 +216,12 @@ def settings_keyboard():
 
 async def send_main_menu(chat_id):
 
+    # Создаём FSInputFile каждый раз заново
+    photo = FSInputFile(PHOTO_PATH)
+
     await bot.send_photo(
         chat_id=chat_id,
-        photo=MENU_PHOTO,
+        photo=photo,
         caption="Главное меню:",
         reply_markup=main_menu()
     )
@@ -236,10 +248,12 @@ WELCOME_TEXT = """
 async def start_handler(message: Message):
     user_id = message.from_user.id
 
+    # Если пользователь уже прошёл модерацию
     if user_id in approved_users:
         await send_main_menu(message.chat.id)
         return
 
+    # Новый пользователь
     await message.answer(WELCOME_TEXT)
 
 # =====================================
@@ -289,28 +303,22 @@ async def restart_form(callback: CallbackQuery):
 async def send_form(callback: CallbackQuery):
     user_id = callback.from_user.id
 
-    await callback.answer("Заявка отправлена!")
+    await callback.answer(
+        "Заявка отправлена!"
+    )
 
     await callback.message.delete()
 
+    # Ожидание 5 секунд
     await asyncio.sleep(5)
 
+    # Добавляем пользователя
     approved_users.add(user_id)
 
-    await send_main_menu(callback.message.chat.id)
-
-# =====================================
-# НАЗАД В МЕНЮ
-# =====================================
-
-@dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu(callback: CallbackQuery):
-
-    await callback.message.delete()
-
-    await send_main_menu(callback.message.chat.id)
-
-    await callback.answer()
+    # Открываем меню
+    await send_main_menu(
+        callback.message.chat.id
+    )
 
 # =====================================
 # ПРОФИЛЬ
@@ -320,6 +328,7 @@ async def back_to_menu(callback: CallbackQuery):
 async def profile_handler(callback: CallbackQuery):
     user_id = callback.from_user.id
 
+    # Удаляем главное меню
     await callback.message.delete()
 
     profile_text = f"""
@@ -347,10 +356,15 @@ ___________________
 @dp.callback_query(F.data == "mirror")
 async def mirror_handler(callback: CallbackQuery):
 
+    # Удаляем меню
     await callback.message.delete()
 
+    mirror_text = """
+Для получения личного зеркала просим вас написать оператору.
+"""
+
     await callback.message.answer(
-        "Для получения личного зеркала просим вас написать оператору.",
+        mirror_text,
         reply_markup=mirror_keyboard()
     )
 
@@ -363,10 +377,15 @@ async def mirror_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "help")
 async def help_handler(callback: CallbackQuery):
 
+    # Удаляем меню
     await callback.message.delete()
 
+    support_text = """
+Для оказания вам помощи обратитесь к оператору.
+"""
+
     await callback.message.answer(
-        "Для оказания вам помощи обратитесь к оператору.",
+        support_text,
         reply_markup=support_keyboard()
     )
 
@@ -379,10 +398,15 @@ async def help_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "channels")
 async def channels_handler(callback: CallbackQuery):
 
+    # Удаляем меню
     await callback.message.delete()
 
+    channels_text = """
+Все каналы команды:
+"""
+
     await callback.message.answer(
-        "Все каналы команды:",
+        channels_text,
         reply_markup=channels_keyboard()
     )
 
@@ -395,10 +419,15 @@ async def channels_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "settings")
 async def settings_handler(callback: CallbackQuery):
 
+    # Удаляем меню
     await callback.message.delete()
 
+    settings_text = """
+Настройки:
+"""
+
     await callback.message.answer(
-        "Настройки:",
+        settings_text,
         reply_markup=settings_keyboard()
     )
 
@@ -418,7 +447,9 @@ async def settings_handler(callback: CallbackQuery):
         ]
     )
 )
-async def unavailable_sections(callback: CallbackQuery):
+async def unavailable_sections(
+    callback: CallbackQuery
+):
 
     await callback.answer(
         "Этот раздел пока недоступен.",
@@ -426,11 +457,38 @@ async def unavailable_sections(callback: CallbackQuery):
     )
 
 # =====================================
-# ЗАПУСК
+# НАЗАД В МЕНЮ
+# =====================================
+
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(
+    callback: CallbackQuery
+):
+
+    # Удаляем текущее сообщение
+    await callback.message.delete()
+
+    # Возвращаем меню
+    await send_main_menu(
+        callback.message.chat.id
+    )
+
+    await callback.answer()
+
+# =====================================
+# ЗАПУСК БОТА
 # =====================================
 
 async def main():
+
     print("Бот успешно запущен!")
+
+    print("Путь к фото:")
+    print(PHOTO_PATH)
+
+    print("Файл существует:")
+    print(os.path.exists(PHOTO_PATH))
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
