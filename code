@@ -1,3 +1,5 @@
+import requests
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -7,31 +9,43 @@ from telegram.ext import (
     ContextTypes,
 )
 
-TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
+BOT_TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
+PEXELS_API_KEY = "JRop9GKeIZRUd8X1Fn7b3861mqzPsE1LFf8DgdbxMcCgKEJT0zYeT4H7"
 
 
-# Команда /start
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Это MasterAuto")
 
 
-# Обработка любого текста
-async def search_pic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Поиск картинки
+async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text
 
-    try:
-        # Поиск через inline-бота @pic
-        results = await context.bot.get_inline_bot_results(
-            bot_username="pic",
-            query=query
-        )
+    url = "https://api.pexels.com/v1/search"
 
-        # Если картинки найдены
-        if results.results:
-            await context.bot.send_inline_bot_result(
+    headers = {
+        "Authorization": PEXELS_API_KEY
+    }
+
+    params = {
+        "query": query,
+        "per_page": 1
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+
+        photos = data.get("photos")
+
+        if photos:
+            image_url = photos[0]["src"]["large"]
+
+            await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
-                query_id=results.query_id,
-                result_id=results.results[0].id
+                photo=image_url,
+                caption=f"Результат по запросу: {query}"
             )
         else:
             await update.message.reply_text("Картинка не найдена.")
@@ -41,12 +55,12 @@ async def search_pic(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_pic))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_image))
 
-    print("Бот запущен...")
+    print("Бот запущен")
     app.run_polling()
 
 
