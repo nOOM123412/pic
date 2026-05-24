@@ -43,6 +43,7 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=image_url,
                     caption=f'🖼️ Картинка для: "{query}"'
                 )
+                logger.info(f"Успешно найдено изображение для: {query}")
             except Exception as e:
                 logger.error(f"Ошибка отправки фото: {e}")
                 await update.message.reply_text(f'⚠️ Не удалось отправить изображение.')
@@ -50,114 +51,114 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('😕 Не удалось найти изображение.')
             
     except Exception as e:
-        logger.error(f"Ошибка: {e}")
+        logger.error(f"Критическая ошибка: {e}")
         await update.message.reply_text('⚠️ Ошибка при поиске изображения.')
 
 def search_image_url(query: str) -> str:
     """Поиск изображения через разные методы"""
     
-    # Пытаемся Bing Images API
-    image_url = get_bing_image_api(query)
+    # Пытаемся Unsplash (самый надежный)
+    image_url = get_unsplash_image(query)
     if image_url:
+        logger.info(f"Найдено через Unsplash: {image_url}")
         return image_url
     
-    # Пытаемся через Google Custom Search (нужен API ключ)
-    image_url = get_google_image(query)
+    # Пытаемся Pexels
+    image_url = get_pexels_image(query)
     if image_url:
+        logger.info(f"Найдено через Pexels: {image_url}")
         return image_url
     
-    # Пытаемся через Pixabay (свободные изображения)
+    # Пытаемся Pixabay
     image_url = get_pixabay_image(query)
     if image_url:
+        logger.info(f"Найдено через Pixabay: {image_url}")
         return image_url
     
     return None
 
-def get_bing_image_api(query: str) -> str:
-    """Поиск через Bing Images с правильным парсингом"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        
-        # Используем API который возвращает JSON
-        url = f'https://api.search.yahoo.com/site/image'
-        params = {
-            'p': query,
-            'format': 'json'
-        }
-        
-        response = requests.get(url, headers=headers, params=params, timeout=15)
-        
-        if response.status_code == 200:
-            try:
-                data = response.json()
-                if 'results' in data and len(data['results']) > 0:
-                    return data['results'][0]['url']
-            except:
-                pass
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"Ошибка Bing API: {e}")
-        return None
-
-def get_google_image(query: str) -> str:
-    """Поиск через Google Images"""
+def get_unsplash_image(query: str) -> str:
+    """Поиск через Unsplash API (свободные изображения)"""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        # Прямой поиск в Google
-        url = f'https://www.google.com/search?q={quote(query)}&tbm=isch&ijn=0'
-        response = requests.get(url, headers=headers, timeout=15)
+        url = 'https://api.unsplash.com/search/photos'
+        params = {
+            'query': query,
+            'per_page': 1,
+            'client_id': 'fBbNEHWqPEbNxpbYeQCKGz48KzgFzOa_HhqkSjXnqrU'
+        }
         
-        if response.status_code == 200:
-            # Ищем первый img src
-            import re
-            matches = re.findall(r'src="(https?://[^"]+\.(?:jpg|jpeg|png|gif|webp))"', response.text)
-            if matches:
-                for match in matches:
-                    if 'gstatic' not in match and 'google' not in match:
-                        return match
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
         
+        data = response.json()
+        
+        if 'results' in data and len(data['results']) > 0:
+            return data['results'][0]['urls']['regular']
+        
+        logger.warning(f"Unsplash не найдено для: {query}")
         return None
         
     except Exception as e:
-        logger.error(f"Ошибка Google: {e}")
+        logger.error(f"Ошибка Unsplash: {e}")
+        return None
+
+def get_pexels_image(query: str) -> str:
+    """Поиск через Pexels API"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Authorization': 'vE9sTwHWU7H5aLvgXNPE3O4W8D2C7A0B9E1F3G5H'
+        }
+        
+        url = 'https://api.pexels.com/v1/search'
+        params = {
+            'query': query,
+            'per_page': 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'photos' in data and len(data['photos']) > 0:
+            return data['photos'][0]['src']['original']
+        
+        logger.warning(f"Pexels не найдено для: {query}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Ошибка Pexels: {e}")
         return None
 
 def get_pixabay_image(query: str) -> str:
-    """Поиск через Pixabay (свободные изображения без лицензии)"""
+    """Поиск через Pixabay API"""
     try:
-        # Если у тебя есть API ключ Pixabay, подставь его
-        # Получить можно здесь: https://pixabay.com/api/docs/
-        # API_KEY = 'твой_ключ_здесь'
-        
-        # Без API ключа используем простой парсинг
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        url = f'https://pixabay.com/api/'
+        url = 'https://pixabay.com/api/'
         params = {
             'q': query,
             'image_type': 'photo',
-            'pretty': 'true'
+            'per_page': 3,
+            'key': '48036849-5e16d88bfe96ce68f45f87c7a'
         }
         
-        response = requests.get(url, headers=headers, params=params, timeout=15)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
         
-        if response.status_code == 200:
-            try:
-                data = response.json()
-                if 'hits' in data and len(data['hits']) > 0:
-                    return data['hits'][0]['webformatURL']
-            except:
-                pass
+        data = response.json()
         
+        if 'hits' in data and len(data['hits']) > 0:
+            return data['hits'][0]['webformatURL']
+        
+        logger.warning(f"Pixabay не найдено для: {query}")
         return None
         
     except Exception as e:
