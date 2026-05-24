@@ -1,8 +1,9 @@
 import logging
 import requests
-import re
+import json
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from urllib.parse import quote
 
 # Настройка логирования
 logging.basicConfig(
@@ -33,12 +34,8 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('❌ Этот запрос содержит недопустимый контент.')
             return
         
-        # Сначала пытаемся DuckDuckGo
-        image_url = get_duckduckgo_image(query)
-        
-        # Если DuckDuckGo не сработал, пытаемся Bing
-        if not image_url:
-            image_url = get_bing_image(query)
+        # Поиск изображения
+        image_url = search_image_url(query)
         
         if image_url:
             try:
@@ -56,79 +53,115 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка: {e}")
         await update.message.reply_text('⚠️ Ошибка при поиске изображения.')
 
-def get_duckduckgo_image(query: str) -> str:
-    """Поиск первого изображения через DuckDuckGo"""
+def search_image_url(query: str) -> str:
+    """Поиск изображения через разные методы"""
+    
+    # Пытаемся Bing Images API
+    image_url = get_bing_image_api(query)
+    if image_url:
+        return image_url
+    
+    # Пытаемся через Google Custom Search (нужен API ключ)
+    image_url = get_google_image(query)
+    if image_url:
+        return image_url
+    
+    # Пытаемся через Pixabay (свободные изображения)
+    image_url = get_pixabay_image(query)
+    if image_url:
+        return image_url
+    
+    return None
+
+def get_bing_image_api(query: str) -> str:
+    """Поиск через Bing Images с правильным парсингом"""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
         }
         
-        url = f'https://duckduckgo.com/?q={query}&t=h_&ia=images&iax=images'
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
+        # Используем API который возвращает JSON
+        url = f'https://api.search.yahoo.com/site/image'
+        params = {
+            'p': query,
+            'format': 'json'
+        }
         
-        # Поиск URL изображений в JSON
-        matches = re.findall(r'"image":"([^"]+)"', response.text)
+        response = requests.get(url, headers=headers, params=params, timeout=15)
         
-        if matches:
-            for match in matches:
-                if match and 'http' in match:
-                    return match
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if 'results' in data and len(data['results']) > 0:
+                    return data['results'][0]['url']
+            except:
+                pass
         
-        logger.warning(f"DuckDuckGo: не найдены URL для запроса: {query}")
         return None
         
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Ошибка запроса DuckDuckGo: {e}")
-        return None
     except Exception as e:
-        logger.error(f"Неожиданная ошибка DuckDuckGo: {e}")
+        logger.error(f"Ошибка Bing API: {e}")
         return None
 
-def get_bing_image(query: str) -> str:
-    """Поиск первого изображения через Bing (резервный вариант)"""
+def get_google_image(query: str) -> str:
+    """Поиск через Google Images"""
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        url = f'https://www.bing.com/images/search?q={query}'
-        
+        # Прямой поиск в Google
+        url = f'https://www.google.com/search?q={quote(query)}&tbm=isch&ijn=0'
         response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
         
-        # Поиск URL изображений в JSON
-        matches = re.findall(r'"murl":"([^"]+)"', response.text)
+        if response.status_code == 200:
+            # Ищем первый img src
+            import re
+            matches = re.findall(r'src="(https?://[^"]+\.(?:jpg|jpeg|png|gif|webp))"', response.text)
+            if matches:
+                for match in matches:
+                    if 'gstatic' not in match and 'google' not in match:
+                        return match
         
-        if matches:
-            for match in matches:
-                if match and 'http' in match:
-                    return match
-        
-        logger.warning(f"Bing: не найдены URL для запроса: {query}")
         return None
         
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Ошибка запроса Bing: {e}")
-        return None
     except Exception as e:
-        logger.error(f"Неожиданная ошибка Bing: {e}")
+        logger.error(f"Ошибка Google: {e}")
+        return None
+
+def get_pixabay_image(query: str) -> str:
+    """Поиск через Pixabay (свободные изображения без лицензии)"""
+    try:
+        # Если у тебя есть API ключ Pixabay, подставь его
+        # Получить можно здесь: https://pixabay.com/api/docs/
+        # API_KEY = 'твой_ключ_здесь'
+        
+        # Без API ключа используем простой парсинг
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        url = f'https://pixabay.com/api/'
+        params = {
+            'q': query,
+            'image_type': 'photo',
+            'pretty': 'true'
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if 'hits' in data and len(data['hits']) > 0:
+                    return data['hits'][0]['webformatURL']
+            except:
+                pass
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Ошибка Pixabay: {e}")
         return None
 
 def main():
