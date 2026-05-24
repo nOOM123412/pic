@@ -1,6 +1,4 @@
 import asyncio
-import os
-
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
@@ -20,11 +18,10 @@ from aiogram.client.default import DefaultBotProperties
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 # =====================================
-# ПУТЬ К ФОТО
+# ФОТО ГЛАВНОГО МЕНЮ
 # =====================================
 
-SHARED_DIR = os.getenv("SHARED_DIR", ".")
-MENU_PHOTO = os.path.join(SHARED_DIR, "tmpptqajd1i.png")
+MENU_PHOTO = FSInputFile("tmpptqajd1i.png")
 
 # =====================================
 # BOT
@@ -116,7 +113,7 @@ def mirror_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Оператор",
+                    text="@KrSeii",
                     url="https://t.me/KrSeii"
                 )
             ],
@@ -135,7 +132,7 @@ def support_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Оператор",
+                    text="@KrSeII",
                     url="https://t.me/KrSeII"
                 )
             ],
@@ -210,11 +207,9 @@ def settings_keyboard():
 
 async def send_main_menu(chat_id):
 
-    photo = FSInputFile(MENU_PHOTO)
-
     await bot.send_photo(
         chat_id=chat_id,
-        photo=photo,
+        photo=MENU_PHOTO,
         caption="Главное меню:",
         reply_markup=main_menu()
     )
@@ -241,12 +236,10 @@ WELCOME_TEXT = """
 async def start_handler(message: Message):
     user_id = message.from_user.id
 
-    # Пользователь уже прошёл модерацию
     if user_id in approved_users:
         await send_main_menu(message.chat.id)
         return
 
-    # Новый пользователь
     await message.answer(WELCOME_TEXT)
 
 # =====================================
@@ -307,6 +300,19 @@ async def send_form(callback: CallbackQuery):
     await send_main_menu(callback.message.chat.id)
 
 # =====================================
+# НАЗАД В МЕНЮ
+# =====================================
+
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(callback: CallbackQuery):
+
+    await callback.message.delete()
+
+    await send_main_menu(callback.message.chat.id)
+
+    await callback.answer()
+
+# =====================================
 # ПРОФИЛЬ
 # =====================================
 
@@ -318,7 +324,7 @@ async def profile_handler(callback: CallbackQuery):
 
     profile_text = f"""
 Ваш профиль:
-____________
+___________________
 
 • Профиты - 0
 
@@ -343,12 +349,8 @@ async def mirror_handler(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    mirror_text = """
-Для получения личного зеркала просим вас написать оператору.
-"""
-
     await callback.message.answer(
-        mirror_text,
+        "Для получения личного зеркала просим вас написать оператору.",
         reply_markup=mirror_keyboard()
     )
 
@@ -363,12 +365,8 @@ async def help_handler(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    support_text = """
-Для оказания вам помощи обратитесь к оператору.
-"""
-
     await callback.message.answer(
-        support_text,
+        "Для оказания вам помощи обратитесь к оператору.",
         reply_markup=support_keyboard()
     )
 
@@ -383,12 +381,8 @@ async def channels_handler(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    channels_text = """
-Все каналы команды:
-"""
-
     await callback.message.answer(
-        channels_text,
+        "Все каналы команды:",
         reply_markup=channels_keyboard()
     )
 
@@ -403,12 +397,8 @@ async def settings_handler(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    settings_text = """
-Настройки:
-"""
-
     await callback.message.answer(
-        settings_text,
+        "Настройки:",
         reply_markup=settings_keyboard()
     )
 
@@ -434,19 +424,6 @@ async def unavailable_sections(callback: CallbackQuery):
         "Этот раздел пока недоступен.",
         show_alert=True
     )
-
-# =====================================
-# НАЗАД В МЕНЮ
-# =====================================
-
-@dp.callback_query(F.data == "back_to_menu")
-async def back_to_menu(callback: CallbackQuery):
-
-    await callback.message.delete()
-
-    await send_main_menu(callback.message.chat.id)
-
-    await callback.answer()
 
 # =====================================
 # ЗАПУСК
