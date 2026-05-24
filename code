@@ -216,7 +216,7 @@ def settings_keyboard():
 
 async def send_main_menu(chat_id):
 
-    # Создаём FSInputFile каждый раз заново
+    # Создаём файл каждый раз заново
     photo = FSInputFile(PHOTO_PATH)
 
     await bot.send_photo(
@@ -246,27 +246,42 @@ WELCOME_TEXT = """
 
 @dp.message(CommandStart())
 async def start_handler(message: Message):
+
     user_id = message.from_user.id
 
-    # Если пользователь уже прошёл модерацию
+    # Пользователь уже прошёл модерацию
     if user_id in approved_users:
-        await send_main_menu(message.chat.id)
+
+        await send_main_menu(
+            message.chat.id
+        )
+
         return
 
     # Новый пользователь
-    await message.answer(WELCOME_TEXT)
+    await message.answer(
+        WELCOME_TEXT
+    )
 
 # =====================================
 # АНКЕТА
 # =====================================
 
-@dp.message()
+@dp.message(F.text)
 async def form_handler(message: Message):
+
     user_id = message.from_user.id
 
+    # Игнорируем команды
+    if message.text.startswith("/"):
+        return
+
+    # Игнорируем пользователей
+    # прошедших модерацию
     if user_id in approved_users:
         return
 
+    # Сохраняем анкету
     user_forms[user_id] = message.text
 
     text = f"""
@@ -286,12 +301,18 @@ async def form_handler(message: Message):
 # ЗАНОВО
 # =====================================
 
-@dp.callback_query(F.data == "restart_form")
-async def restart_form(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "restart_form"
+)
+async def restart_form(
+    callback: CallbackQuery
+):
 
     await callback.message.delete()
 
-    await callback.message.answer(WELCOME_TEXT)
+    await callback.message.answer(
+        WELCOME_TEXT
+    )
 
     await callback.answer()
 
@@ -299,8 +320,13 @@ async def restart_form(callback: CallbackQuery):
 # ОТПРАВИТЬ
 # =====================================
 
-@dp.callback_query(F.data == "send_form")
-async def send_form(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "send_form"
+)
+async def send_form(
+    callback: CallbackQuery
+):
+
     user_id = callback.from_user.id
 
     await callback.answer(
@@ -309,7 +335,7 @@ async def send_form(callback: CallbackQuery):
 
     await callback.message.delete()
 
-    # Ожидание 5 секунд
+    # Ждём 5 секунд
     await asyncio.sleep(5)
 
     # Добавляем пользователя
@@ -324,11 +350,16 @@ async def send_form(callback: CallbackQuery):
 # ПРОФИЛЬ
 # =====================================
 
-@dp.callback_query(F.data == "profile")
-async def profile_handler(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "profile"
+)
+async def profile_handler(
+    callback: CallbackQuery
+):
+
     user_id = callback.from_user.id
 
-    # Удаляем главное меню
+    # Удаляем меню
     await callback.message.delete()
 
     profile_text = f"""
@@ -353,18 +384,18 @@ ___________________
 # МОЁ ЗЕРКАЛО
 # =====================================
 
-@dp.callback_query(F.data == "mirror")
-async def mirror_handler(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "mirror"
+)
+async def mirror_handler(
+    callback: CallbackQuery
+):
 
     # Удаляем меню
     await callback.message.delete()
 
-    mirror_text = """
-Для получения личного зеркала просим вас написать оператору.
-"""
-
     await callback.message.answer(
-        mirror_text,
+        "Для получения личного зеркала просим вас написать оператору.",
         reply_markup=mirror_keyboard()
     )
 
@@ -374,18 +405,18 @@ async def mirror_handler(callback: CallbackQuery):
 # ПОДДЕРЖКА
 # =====================================
 
-@dp.callback_query(F.data == "help")
-async def help_handler(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "help"
+)
+async def help_handler(
+    callback: CallbackQuery
+):
 
     # Удаляем меню
     await callback.message.delete()
 
-    support_text = """
-Для оказания вам помощи обратитесь к оператору.
-"""
-
     await callback.message.answer(
-        support_text,
+        "Для оказания вам помощи обратитесь к оператору.",
         reply_markup=support_keyboard()
     )
 
@@ -395,18 +426,18 @@ async def help_handler(callback: CallbackQuery):
 # КАНАЛЫ
 # =====================================
 
-@dp.callback_query(F.data == "channels")
-async def channels_handler(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "channels"
+)
+async def channels_handler(
+    callback: CallbackQuery
+):
 
     # Удаляем меню
     await callback.message.delete()
 
-    channels_text = """
-Все каналы команды:
-"""
-
     await callback.message.answer(
-        channels_text,
+        "Все каналы команды:",
         reply_markup=channels_keyboard()
     )
 
@@ -416,18 +447,18 @@ async def channels_handler(callback: CallbackQuery):
 # НАСТРОЙКИ
 # =====================================
 
-@dp.callback_query(F.data == "settings")
-async def settings_handler(callback: CallbackQuery):
+@dp.callback_query(
+    F.data == "settings"
+)
+async def settings_handler(
+    callback: CallbackQuery
+):
 
     # Удаляем меню
     await callback.message.delete()
 
-    settings_text = """
-Настройки:
-"""
-
     await callback.message.answer(
-        settings_text,
+        "Настройки:",
         reply_markup=settings_keyboard()
     )
 
@@ -460,7 +491,9 @@ async def unavailable_sections(
 # НАЗАД В МЕНЮ
 # =====================================
 
-@dp.callback_query(F.data == "back_to_menu")
+@dp.callback_query(
+    F.data == "back_to_menu"
+)
 async def back_to_menu(
     callback: CallbackQuery
 ):
