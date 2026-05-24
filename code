@@ -33,14 +33,22 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('❌ Этот запрос содержит недопустимый контент.')
             return
         
-        # Поиск через Bing
-        image_url = get_bing_image(query)
+        # Сначала пытаемся DuckDuckGo
+        image_url = get_duckduckgo_image(query)
+        
+        # Если DuckDuckGo не сработал, пытаемся Bing
+        if not image_url:
+            image_url = get_bing_image(query)
         
         if image_url:
-            await update.message.reply_photo(
-                photo=image_url,
-                caption=f'🖼️ Картинка для: "{query}"'
-            )
+            try:
+                await update.message.reply_photo(
+                    photo=image_url,
+                    caption=f'🖼️ Картинка для: "{query}"'
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки фото: {e}")
+                await update.message.reply_text(f'⚠️ Не удалось отправить изображение.')
         else:
             await update.message.reply_text('😕 Не удалось найти изображение.')
             
@@ -48,29 +56,79 @@ async def search_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка: {e}")
         await update.message.reply_text('⚠️ Ошибка при поиске изображения.')
 
-def get_bing_image(query: str) -> str:
-    """Поиск первого изображения через Bing"""
+def get_duckduckgo_image(query: str) -> str:
+    """Поиск первого изображения через DuckDuckGo"""
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
+        url = f'https://duckduckgo.com/?q={query}&t=h_&ia=images&iax=images'
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        # Поиск URL изображений в JSON
+        matches = re.findall(r'"image":"([^"]+)"', response.text)
+        
+        if matches:
+            for match in matches:
+                if match and 'http' in match:
+                    return match
+        
+        logger.warning(f"DuckDuckGo: не найдены URL для запроса: {query}")
+        return None
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка запроса DuckDuckGo: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка DuckDuckGo: {e}")
+        return None
+
+def get_bing_image(query: str) -> str:
+    """Поиск первого изображения через Bing (резервный вариант)"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0',
         }
         
         url = f'https://www.bing.com/images/search?q={query}'
         
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
         # Поиск URL изображений в JSON
         matches = re.findall(r'"murl":"([^"]+)"', response.text)
         
         if matches:
-            # Возвращаем первое найденное изображение
-            return matches[0]
+            for match in matches:
+                if match and 'http' in match:
+                    return match
         
+        logger.warning(f"Bing: не найдены URL для запроса: {query}")
         return None
         
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка запроса Bing: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Ошибка Bing: {e}")
+        logger.error(f"Неожиданная ошибка Bing: {e}")
         return None
 
 def main():
