@@ -1,7 +1,37 @@
+import os
+import sys
+import subprocess
+
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+
+# Автоустановка библиотек
+required_packages = [
+    "python-telegram-bot",
+    "duckduckgo-search"
+]
+
+for package in required_packages:
+    try:
+        __import__(package.split("-")[0])
+    except:
+        print(f"Устанавливаю {package}...")
+        install(package)
+
+
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 from duckduckgo_search import DDGS
 
+
+# ВСТАВЬ СВОЙ ТОКЕН
 TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 
 
@@ -30,11 +60,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    print("Бот запускается...")
+
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_message
+        )
+    )
 
-    print("Бот запущен")
+    print("Бот запущен!")
 
     app.run_polling()
 
