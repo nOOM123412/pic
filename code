@@ -23,12 +23,9 @@ TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
 # ПУТЬ К ФОТО
 # =====================================
 
-SHARED_DIR = os.environ.get("SHARED_DIR")
+SHARED_DIR = os.environ.get("SHARED_DIR", ".")
 
-PHOTO_PATH = os.path.join(
-    SHARED_DIR,
-    "tmpptqajd1i.png"
-)
+PHOTO_PATH = f"{SHARED_DIR}/tmpptqajd1i.png"
 
 # =====================================
 # BOT
@@ -216,15 +213,28 @@ def settings_keyboard():
 
 async def send_main_menu(chat_id):
 
-    # Создаём файл каждый раз заново
-    photo = FSInputFile(PHOTO_PATH)
+    try:
 
-    await bot.send_photo(
-        chat_id=chat_id,
-        photo=photo,
-        caption="Главное меню:",
-        reply_markup=main_menu()
-    )
+        photo = FSInputFile(PHOTO_PATH)
+
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption="Главное меню:",
+            reply_markup=main_menu()
+        )
+
+    except Exception as e:
+
+        print("Ошибка фото:", e)
+
+        # Если фото не отправилось —
+        # отправляем обычное меню
+        await bot.send_message(
+            chat_id=chat_id,
+            text="Главное меню:",
+            reply_markup=main_menu()
+        )
 
 # =====================================
 # ТЕКСТЫ
@@ -249,7 +259,7 @@ async def start_handler(message: Message):
 
     user_id = message.from_user.id
 
-    # Пользователь уже прошёл модерацию
+    # Если пользователь уже прошёл модерацию
     if user_id in approved_users:
 
         await send_main_menu(
@@ -515,12 +525,8 @@ async def back_to_menu(
 async def main():
 
     print("Бот успешно запущен!")
-
-    print("Путь к фото:")
-    print(PHOTO_PATH)
-
-    print("Файл существует:")
-    print(os.path.exists(PHOTO_PATH))
+    print("PHOTO_PATH:", PHOTO_PATH)
+    print("Файл существует:", os.path.exists(PHOTO_PATH))
 
     await dp.start_polling(bot)
 
