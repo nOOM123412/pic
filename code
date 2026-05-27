@@ -1,10 +1,39 @@
+import os
+import sys
+import subprocess
+
+# ==========================================
+# АВТОУСТАНОВКА БИБЛИОТЕК
+# ==========================================
+
+required = [
+    "telethon",
+    "python-telegram-bot==20.7"
+]
+
+for package in required:
+    try:
+        __import__(package.split("==")[0].replace("-", "_"))
+    except:
+        print(f"Устанавливаю {package}...")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", package]
+        )
+
+# ==========================================
+# ИМПОРТЫ
+# ==========================================
+
 import asyncio
+
 from telethon import TelegramClient
+
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Update,
 )
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,23 +41,19 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ==================================================
-# ВАШ BOT TOKEN
-# ==================================================
+# ==========================================
+# НАСТРОЙКИ
+# ==========================================
 
 BOT_TOKEN = "8790161123:AAGHF8QlwAJ9RhVS9PIGqyD0aIvTB8IG6gc"
 
-# ==================================================
-# ПУБЛИЧНЫЕ API TELEGRAM
-# ==================================================
-# Используются только для теста
-
+# ПУБЛИЧНЫЙ API
 API_ID = 6
 API_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 
 TARGET_BOT = "KRKM_robot"
 
-# ==================================================
+# ==========================================
 
 tg_client = TelegramClient(
     "session",
@@ -38,6 +63,9 @@ tg_client = TelegramClient(
 
 user_states = {}
 
+# ==========================================
+# СОЗДАНИЕ КНОПОК
+# ==========================================
 
 async def build_keyboard(message):
     if not message.buttons:
@@ -46,20 +74,23 @@ async def build_keyboard(message):
     keyboard = []
 
     for row_i, row in enumerate(message.buttons):
-        buttons = []
+        row_buttons = []
 
         for col_i, btn in enumerate(row):
-            buttons.append(
+            row_buttons.append(
                 InlineKeyboardButton(
                     text=btn.text,
                     callback_data=f"{row_i}:{col_i}"
                 )
             )
 
-        keyboard.append(buttons)
+        keyboard.append(row_buttons)
 
     return InlineKeyboardMarkup(keyboard)
 
+# ==========================================
+# ОТПРАВКА СООБЩЕНИЯ
+# ==========================================
 
 async def send_new_message(
     user_id,
@@ -68,15 +99,15 @@ async def send_new_message(
 ):
     state = user_states.get(user_id)
 
-    # удаляем старое сообщение
+    # удаление старого сообщения
     if state:
-        old_msg = state.get("message_id")
+        old_message_id = state.get("message_id")
 
-        if old_msg:
+        if old_message_id:
             try:
                 await context.bot.delete_message(
                     chat_id=user_id,
-                    message_id=old_msg
+                    message_id=old_message_id
                 )
             except:
                 pass
@@ -94,8 +125,14 @@ async def send_new_message(
         "telethon_message": response
     }
 
+# ==========================================
+# /start
+# ==========================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     user_id = update.effective_user.id
 
     async with tg_client.conversation(TARGET_BOT) as conv:
@@ -109,8 +146,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context
     )
 
+# ==========================================
+# ОБРАБОТКА КНОПОК
+# ==========================================
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     query = update.callback_query
 
     await query.answer()
@@ -124,14 +167,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     telethon_message = state["telethon_message"]
 
-    row_i, col_i = map(int, query.data.split(":"))
+    row_i, col_i = map(
+        int,
+        query.data.split(":")
+    )
 
     try:
+        # нажатие кнопки
         await telethon_message.click(
             row_i,
             col_i
         )
 
+        # получение нового ответа
         async with tg_client.conversation(TARGET_BOT) as conv:
             response = await conv.get_response()
 
@@ -147,11 +195,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"Ошибка:\n{e}"
         )
 
+# ==========================================
+# MAIN
+# ==========================================
 
 async def main():
+
+    print("Запуск userbot...")
+
     await tg_client.start()
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    print("Userbot авторизован")
+
+    app = Application.builder().token(
+        BOT_TOKEN
+    ).build()
 
     app.add_handler(
         CommandHandler("start", start)
@@ -170,6 +228,7 @@ async def main():
     while True:
         await asyncio.sleep(1)
 
+# ==========================================
 
 if __name__ == "__main__":
     asyncio.run(main())
