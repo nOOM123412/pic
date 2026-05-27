@@ -1,534 +1,175 @@
 import asyncio
-import os
-
-from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.types import (
-    Message,
-    CallbackQuery,
-    InlineKeyboardMarkup,
+from telethon import TelegramClient
+from telegram import (
     InlineKeyboardButton,
-    FSInputFile
+    InlineKeyboardMarkup,
+    Update,
 )
-from aiogram.client.default import DefaultBotProperties
-
-# =====================================
-# ТОКЕН БОТА
-# =====================================
-
-TOKEN = "8762386355:AAG3gBPTu3Kq_KYTgbawLKoUnJMqk-HX97Q"
-
-# =====================================
-# ПУТЬ К ФОТО
-# =====================================
-
-SHARED_DIR = os.environ.get("SHARED_DIR", ".")
-
-PHOTO_PATH = f"{SHARED_DIR}/tmpptqajd1i.png"
-
-# =====================================
-# BOT
-# =====================================
-
-bot = Bot(
-    token=TOKEN,
-    default=DefaultBotProperties(
-        parse_mode=ParseMode.HTML
-    )
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
 )
 
-dp = Dispatcher()
+# ==================================================
+# ВАШ BOT TOKEN
+# ==================================================
 
-# =====================================
-# ХРАНЕНИЕ ДАННЫХ
-# =====================================
+BOT_TOKEN = "8790161123:AAGHF8QlwAJ9RhVS9PIGqyD0aIvTB8IG6gc"
 
-approved_users = set()
-user_forms = {}
+# ==================================================
+# ПУБЛИЧНЫЕ API TELEGRAM
+# ==================================================
+# Используются только для теста
 
-# =====================================
-# КНОПКИ
-# =====================================
+API_ID = 6
+API_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 
-def form_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
+TARGET_BOT = "KRKM_robot"
+
+# ==================================================
+
+tg_client = TelegramClient(
+    "session",
+    API_ID,
+    API_HASH
+)
+
+user_states = {}
+
+
+async def build_keyboard(message):
+    if not message.buttons:
+        return None
+
+    keyboard = []
+
+    for row_i, row in enumerate(message.buttons):
+        buttons = []
+
+        for col_i, btn in enumerate(row):
+            buttons.append(
                 InlineKeyboardButton(
-                    text="Отправить",
-                    callback_data="send_form"
-                ),
-                InlineKeyboardButton(
-                    text="Заново",
-                    callback_data="restart_form"
+                    text=btn.text,
+                    callback_data=f"{row_i}:{col_i}"
                 )
-            ]
-        ]
+            )
+
+        keyboard.append(buttons)
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def send_new_message(
+    user_id,
+    response,
+    context
+):
+    state = user_states.get(user_id)
+
+    # удаляем старое сообщение
+    if state:
+        old_msg = state.get("message_id")
+
+        if old_msg:
+            try:
+                await context.bot.delete_message(
+                    chat_id=user_id,
+                    message_id=old_msg
+                )
+            except:
+                pass
+
+    markup = await build_keyboard(response)
+
+    sent = await context.bot.send_message(
+        chat_id=user_id,
+        text=response.text or "Пустое сообщение",
+        reply_markup=markup
+    )
+
+    user_states[user_id] = {
+        "message_id": sent.message_id,
+        "telethon_message": response
+    }
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    async with tg_client.conversation(TARGET_BOT) as conv:
+        await conv.send_message("/start")
+
+        response = await conv.get_response()
+
+    await send_new_message(
+        user_id,
+        response,
+        context
     )
 
 
-def main_menu():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Мой профиль",
-                    callback_data="profile"
-                ),
-                InlineKeyboardButton(
-                    text="Моё зеркало",
-                    callback_data="mirror"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Поддержка",
-                    callback_data="help"
-                ),
-                InlineKeyboardButton(
-                    text="Каналы",
-                    callback_data="channels"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Настройки",
-                    callback_data="settings"
-                )
-            ]
-        ]
-    )
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
 
+    await query.answer()
 
-def profile_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="• Назад •",
-                    callback_data="back_to_menu"
-                )
-            ]
-        ]
-    )
+    user_id = query.from_user.id
 
+    state = user_states.get(user_id)
 
-def mirror_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="@KrSeii",
-                    url="https://t.me/KrSeii"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data="back_to_menu"
-                )
-            ]
-        ]
-    )
+    if not state:
+        return
 
+    telethon_message = state["telethon_message"]
 
-def support_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="@KrSeII",
-                    url="https://t.me/KrSeII"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data="back_to_menu"
-                )
-            ]
-        ]
-    )
-
-
-def channels_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Мануал",
-                    url="https://t.me/UDD_man"
-                ),
-                InlineKeyboardButton(
-                    text="Болталка",
-                    url="https://t.me/+_4Z8Ri03Yw4yNzVi"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data="back_to_menu"
-                )
-            ]
-        ]
-    )
-
-
-def settings_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Логи",
-                    callback_data="logs"
-                ),
-                InlineKeyboardButton(
-                    text="Цены",
-                    callback_data="prices"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Моё имя",
-                    callback_data="my_name"
-                ),
-                InlineKeyboardButton(
-                    text="Реквизиты",
-                    callback_data="requisites"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data="back_to_menu"
-                )
-            ]
-        ]
-    )
-
-# =====================================
-# ОТПРАВКА ГЛАВНОГО МЕНЮ
-# =====================================
-
-async def send_main_menu(chat_id):
+    row_i, col_i = map(int, query.data.split(":"))
 
     try:
+        await telethon_message.click(
+            row_i,
+            col_i
+        )
 
-        photo = FSInputFile(PHOTO_PATH)
+        async with tg_client.conversation(TARGET_BOT) as conv:
+            response = await conv.get_response()
 
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=photo,
-            caption="Главное меню:",
-            reply_markup=main_menu()
+        await send_new_message(
+            user_id,
+            response,
+            context
         )
 
     except Exception as e:
-
-        print("Ошибка фото:", e)
-
-        # Если фото не отправилось —
-        # отправляем обычное меню
-        await bot.send_message(
-            chat_id=chat_id,
-            text="Главное меню:",
-            reply_markup=main_menu()
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"Ошибка:\n{e}"
         )
 
-# =====================================
-# ТЕКСТЫ
-# =====================================
-
-WELCOME_TEXT = """
-Добро пожаловать в UDD team!
-
-Для вступления заполните форму ниже:
-
-• Опыт работы.
-• Откуда узнали о нас?
-• Какое время уделяете работе?
-"""
-
-# =====================================
-# START
-# =====================================
-
-@dp.message(CommandStart())
-async def start_handler(message: Message):
-
-    user_id = message.from_user.id
-
-    # Если пользователь уже прошёл модерацию
-    if user_id in approved_users:
-
-        await send_main_menu(
-            message.chat.id
-        )
-
-        return
-
-    # Новый пользователь
-    await message.answer(
-        WELCOME_TEXT
-    )
-
-# =====================================
-# АНКЕТА
-# =====================================
-
-@dp.message(F.text)
-async def form_handler(message: Message):
-
-    user_id = message.from_user.id
-
-    # Игнорируем команды
-    if message.text.startswith("/"):
-        return
-
-    # Игнорируем пользователей
-    # прошедших модерацию
-    if user_id in approved_users:
-        return
-
-    # Сохраняем анкету
-    user_forms[user_id] = message.text
-
-    text = f"""
-Ваша заявка выглядит так:
-
-• {message.text}
-
-Всё верно?
-"""
-
-    await message.answer(
-        text,
-        reply_markup=form_keyboard()
-    )
-
-# =====================================
-# ЗАНОВО
-# =====================================
-
-@dp.callback_query(
-    F.data == "restart_form"
-)
-async def restart_form(
-    callback: CallbackQuery
-):
-
-    await callback.message.delete()
-
-    await callback.message.answer(
-        WELCOME_TEXT
-    )
-
-    await callback.answer()
-
-# =====================================
-# ОТПРАВИТЬ
-# =====================================
-
-@dp.callback_query(
-    F.data == "send_form"
-)
-async def send_form(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    await callback.answer(
-        "Заявка отправлена!"
-    )
-
-    await callback.message.delete()
-
-    # Ждём 5 секунд
-    await asyncio.sleep(5)
-
-    # Добавляем пользователя
-    approved_users.add(user_id)
-
-    # Открываем меню
-    await send_main_menu(
-        callback.message.chat.id
-    )
-
-# =====================================
-# ПРОФИЛЬ
-# =====================================
-
-@dp.callback_query(
-    F.data == "profile"
-)
-async def profile_handler(
-    callback: CallbackQuery
-):
-
-    user_id = callback.from_user.id
-
-    # Удаляем меню
-    await callback.message.delete()
-
-    profile_text = f"""
-Ваш профиль:
-___________________
-
-• Профиты - 0
-
-• Касса - 0$
-
-• Ваш ID - {user_id}
-"""
-
-    await callback.message.answer(
-        profile_text,
-        reply_markup=profile_keyboard()
-    )
-
-    await callback.answer()
-
-# =====================================
-# МОЁ ЗЕРКАЛО
-# =====================================
-
-@dp.callback_query(
-    F.data == "mirror"
-)
-async def mirror_handler(
-    callback: CallbackQuery
-):
-
-    # Удаляем меню
-    await callback.message.delete()
-
-    await callback.message.answer(
-        "Для получения личного зеркала просим вас написать оператору.",
-        reply_markup=mirror_keyboard()
-    )
-
-    await callback.answer()
-
-# =====================================
-# ПОДДЕРЖКА
-# =====================================
-
-@dp.callback_query(
-    F.data == "help"
-)
-async def help_handler(
-    callback: CallbackQuery
-):
-
-    # Удаляем меню
-    await callback.message.delete()
-
-    await callback.message.answer(
-        "Для оказания вам помощи обратитесь к оператору.",
-        reply_markup=support_keyboard()
-    )
-
-    await callback.answer()
-
-# =====================================
-# КАНАЛЫ
-# =====================================
-
-@dp.callback_query(
-    F.data == "channels"
-)
-async def channels_handler(
-    callback: CallbackQuery
-):
-
-    # Удаляем меню
-    await callback.message.delete()
-
-    await callback.message.answer(
-        "Все каналы команды:",
-        reply_markup=channels_keyboard()
-    )
-
-    await callback.answer()
-
-# =====================================
-# НАСТРОЙКИ
-# =====================================
-
-@dp.callback_query(
-    F.data == "settings"
-)
-async def settings_handler(
-    callback: CallbackQuery
-):
-
-    # Удаляем меню
-    await callback.message.delete()
-
-    await callback.message.answer(
-        "Настройки:",
-        reply_markup=settings_keyboard()
-    )
-
-    await callback.answer()
-
-# =====================================
-# НЕДОСТУПНЫЕ РАЗДЕЛЫ
-# =====================================
-
-@dp.callback_query(
-    F.data.in_(
-        [
-            "logs",
-            "prices",
-            "my_name",
-            "requisites"
-        ]
-    )
-)
-async def unavailable_sections(
-    callback: CallbackQuery
-):
-
-    await callback.answer(
-        "Этот раздел пока недоступен.",
-        show_alert=True
-    )
-
-# =====================================
-# НАЗАД В МЕНЮ
-# =====================================
-
-@dp.callback_query(
-    F.data == "back_to_menu"
-)
-async def back_to_menu(
-    callback: CallbackQuery
-):
-
-    # Удаляем текущее сообщение
-    await callback.message.delete()
-
-    # Возвращаем меню
-    await send_main_menu(
-        callback.message.chat.id
-    )
-
-    await callback.answer()
-
-# =====================================
-# ЗАПУСК БОТА
-# =====================================
 
 async def main():
+    await tg_client.start()
 
-    print("Бот успешно запущен!")
-    print("PHOTO_PATH:", PHOTO_PATH)
-    print("Файл существует:", os.path.exists(PHOTO_PATH))
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    await dp.start_polling(bot)
+    app.add_handler(
+        CommandHandler("start", start)
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(button_handler)
+    )
+
+    print("BOT STARTED")
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    while True:
+        await asyncio.sleep(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
